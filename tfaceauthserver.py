@@ -29,12 +29,14 @@ from skimage import io as iosk
 import sqlite3
 from collections import defaultdict
 import aiohttp_cors
+from aiohttp_cors import setup as cors_setup, ResourceOptions
 import asyncio
 import collections
 
 model = tensorflow.keras.models.load_model("keras_model.h5")
 logging.basicConfig(
-    handlers=[RotatingFileHandler("faceauth.log", maxBytes=10485760, backupCount=10)],
+    handlers=[RotatingFileHandler(
+        "faceauth.log", maxBytes=10485760, backupCount=10)],
     level=logging.DEBUG,
     format='"%(asctime)s -[Face Recogntion] - %(levelname)-7.7s %(message)s',
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -72,10 +74,12 @@ async def decodeImage(msg):
 
 
 async def get_face_encoding_from_base64(base64String):
-    nparr = np.frombuffer(base64.b64decode(base64String.encode("utf-8")), np.uint8)
+    nparr = np.frombuffer(base64.b64decode(
+        base64String.encode("utf-8")), np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    image_encodeing = face_recognition.face_encodings(rgb_img, None, 1, "large")
+    image_encodeing = face_recognition.face_encodings(
+        rgb_img, None, 1, "large")
     # print(image_encodeing)
     return image_encodeing
 
@@ -244,7 +248,8 @@ async def DetectAndCompareFacesInImages(
         return comparisionResult
     except Exception as ex:
         logging.info(
-            agentId + ":Exception in DetectAndCompareFacesInImages : " + str(ex)
+            agentId + ":Exception in DetectAndCompareFacesInImages : " +
+            str(ex)
         )
 
         return await ProcessExceptionData(
@@ -414,7 +419,8 @@ async def VerifyFaceImages(self, *, loads=json.loads):
             dest_image_url_path,
             source_image_url_path,
         )
-        logging.info(agent_id + ":VerifyFaceImages Response: " + str(return_data))
+        logging.info(agent_id + ":VerifyFaceImages Response: " +
+                     str(return_data))
 
         return web.json_response(return_data)
 
@@ -468,11 +474,13 @@ async def ProcessExceptionData(
             ),
         ).start()
         logging.info(
-            agentId + ":ProcessExceptionData Response: " + str(comparisionResult)
+            agentId + ":ProcessExceptionData Response: " +
+            str(comparisionResult)
         )
         return web.json_response(comparisionResult, status=500)
     except Exception as identifier:
-        logging.info(agentId + ":Exception in ProcessExceptionData" + str(identifier))
+        logging.info(
+            agentId + ":Exception in ProcessExceptionData" + str(identifier))
         comparisionResult = {
             "face_found_in_image": 0,
             "face_authenticated_percentage": 0,
@@ -488,14 +496,15 @@ async def detect_faces(image, name):
 
         # Run detector and get bounding boxes of the faces on image.
         detected_faces = face_detector(image, 1)
-        logging.info("Number of faces detected: {}".format(len(detected_faces)))
+        logging.info("Number of faces detected: {}".format(
+            len(detected_faces)))
         for i, d in enumerate(detected_faces):
             logging.info(
                 "Detection {}: Left: {} Top: {} Right: {} Bottom: {}".format(
                     i, d.left(), d.top(), d.right(), d.bottom()
                 )
             )
-            crop = image[d.top() : d.bottom(), d.left() : d.right()]
+            crop = image[d.top(): d.bottom(), d.left(): d.right()]
             resize = cv2.resize(crop, (200, 200))
             return resize
     except Exception as identifier:
@@ -672,7 +681,8 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
             return web.json_response(comparisionResult)
         dest_image_url_path = profilePic_encodingData[agent_id]["url"]
         source_image_url_path = snap_data_url
-        logging.info(agent_id + ":Destination and source Image URL path assigned")
+        logging.info(
+            agent_id + ":Destination and source Image URL path assigned")
 
         destFaceEncodingValue = profilePic_encodingData[agent_id]["encoding"]
         logging.info(
@@ -727,13 +737,15 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
         ).start()
 
         logging.info(
-            agent_id + ":VerifyFaceAuthWithEncoding Response: " + str(comparisionResult)
+            agent_id + ":VerifyFaceAuthWithEncoding Response: " +
+            str(comparisionResult)
         )
 
         return web.json_response(comparisionResult)
 
     except Exception as ex:
-        logging.info(agent_id + ":Exception in VerifyFaceAuthWithEncoding : " + str(ex))
+        logging.info(
+            agent_id + ":Exception in VerifyFaceAuthWithEncoding : " + str(ex))
 
         return await ProcessExceptionData(
             agent_id,
@@ -780,7 +792,8 @@ async def AddOrUpdateProfilePic(self, *, loads=json.loads):
         data_to_be_inserted = (agent_id, profilepic_url, string)
 
         cursor.execute(
-            "SELECT AGENTID FROM AGENTPROFILEPICDETAILS WHERE AGENTID = ?", (agent_id,)
+            "SELECT AGENTID FROM AGENTPROFILEPICDETAILS WHERE AGENTID = ?", (
+                agent_id,)
         )
         ROW = cursor.fetchone()
 
@@ -792,9 +805,9 @@ async def AddOrUpdateProfilePic(self, *, loads=json.loads):
             count = cursor.execute(sqlite_insert_query, data_to_be_inserted)
             conn.commit()
         else:
-            data_to_be_inserted = (profilepic_url, json_encoded_data, agent_id)
+            data_to_be_inserted = (profilepic_url, string, agent_id)
             sqlite_insert_query = """UPDATE AGENTPROFILEPICDETAILS SET PROFILEPICURL=?, ENCODINGDATA=? WHERE AGENTID=?"""
-            cur.execute(sqlite_insert_query, data_to_be_inserted)
+            cursor.execute(sqlite_insert_query, data_to_be_inserted)
             conn.commit()
         conn.close()
         profilePic_encodingData[agent_id]["encoding"] = profilePicEncoding
@@ -815,7 +828,8 @@ async def AddOrUpdateProfilePic(self, *, loads=json.loads):
         return web.json_response(True)
 
     except Exception as ex:
-        logging.info(agent_id + ": Exception in AddOrUpdateProfilePic: " + str(ex))
+        logging.info(
+            agent_id + ": Exception in AddOrUpdateProfilePic: " + str(ex))
         return web.json_response(False)
 
 
@@ -838,7 +852,7 @@ def initialize_db():
 @asyncio.coroutine
 def handler(request):
     return web.Response(
-        text="Hello!", headers={"X-Custom-Server-Header": "Custom data",}
+        text="Hello!", headers={"X-Custom-Server-Header": "Custom data", }
     )
 
 
@@ -846,37 +860,56 @@ app = web.Application()
 cors = aiohttp_cors.setup(app)
 initialize_db()  # initialize sqlite db
 # add the below 2 methods for allowing cors
-resource = cors.add(app.router.add_resource("/VerifyFaceAuthWithEncoding"))
-profile_resource = cors.add(app.router.add_resource("/AddOrUpdateProfilePic"))
-route = cors.add(
-    resource.add_route("POST", VerifyFaceAuthWithEncoding),
-    {
-        "*": aiohttp_cors.ResourceOptions(
-            allow_credentials=True, expose_headers="*", allow_headers="*"
-        )
-    },
-)
-route = cors.add(
-    profile_resource.add_route("POST", AddOrUpdateProfilePic),
-    {
-        "*": aiohttp_cors.ResourceOptions(
-            allow_credentials=True, expose_headers="*", allow_headers="*"
-        )
-    },
-)
-app.add_routes(
-    [
-        web.post("/VerifyFaceImages", VerifyFaceImages),
-        web.post("/test", upload_image),
-        # web.static('/profilepic', config.directory_browsing_proPic,
-        #            show_index=True),
-        # web.static('/sourcepic', config.directory_browsing_destImage,
-        #            show_index=True),
-        web.post("/AddOrUpdateProfilePic", AddOrUpdateProfilePic),
-        web.post("/VerifyFaceAuthWithEncoding", VerifyFaceAuthWithEncoding),
-    ]
-)
+# resource = cors.add(app.router.add_resource("/VerifyFaceAuthWithEncoding"))
+# profile_resource = cors.add(app.router.add_resource("/AddOrUpdateProfilePic"))
+# verifyImages_resource = cors.add(app.router.add_resource("/VerifyFaceImages"))
+# route = cors.add(
+#     verifyImages_resource.add_route("POST", VerifyFaceImages),
+#     {
+#         "*": aiohttp_cors.ResourceOptions(
+#             allow_credentials=True, expose_headers="*", allow_headers="*"
+#         )
+#     },
+# )
+# route = cors.add(
+#     resource.add_route("POST", VerifyFaceAuthWithEncoding),
+#     {
+#         "*": aiohttp_cors.ResourceOptions(
+#             allow_credentials=True, expose_headers="*", allow_headers="*"
+#         )
+#     },
+# )
+# route = cors.add(
+#     profile_resource.add_route("POST", AddOrUpdateProfilePic),
+#     {
+#         "*": aiohttp_cors.ResourceOptions(
+#             allow_credentials=True, expose_headers="*", allow_headers="*"
+#         )
+#     },
+# )
 
+routes = [
+    web.post("/VerifyFaceImages", VerifyFaceImages),
+    web.post("/test", upload_image),
+    # web.static('/profilepic', config.directory_browsing_proPic,
+    #            show_index=True),
+    # web.static('/sourcepic', config.directory_browsing_destImage,
+    #            show_index=True),
+    web.post("/AddOrUpdateProfilePic", AddOrUpdateProfilePic),
+    web.post("/VerifyFaceAuthWithEncoding", VerifyFaceAuthWithEncoding)
+]
+
+app.router.add_routes(routes)
+cors = cors_setup(
+    app,
+    defaults={
+        "*": ResourceOptions(
+            allow_credentials=True, expose_headers="*", allow_headers="*",
+        )
+    },
+)
+for route in list(app.router.routes()):
+    cors.add(route)
 # Comment below 2 lines if attached to Gunicorn in Linux
-# if __name__ == "__main__":
-    # web.run_app(app)
+if __name__ == "__main__":
+    web.run_app(app)
