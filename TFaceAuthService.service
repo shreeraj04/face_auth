@@ -1,0 +1,12 @@
+[Unit]
+Description=Tetherfi Face Auth Server 
+After=network.target
+ 
+[Service]
+User=tetherfirdsecondary 
+WorkingDirectory=/home/tetherfirdsecondary/Desktop/TFaceAuthServer 
+ExecStart=/home/shreeraj/.local/bin/gunicorn tfaceauthserver:app --bind 43.229.84.33:50022 --worker-class=aiohttp.GunicornWebWorker --workers 9 --threads=50 --timeout=500
+Restart=always
+
+[Install] 
+WantedBy=multi-user.target
