@@ -1,42 +1,34 @@
-from aiohttp import web
 import io
 import base64
 import math
 import json
-import face_recognition
-import math
-from PIL import ImageOps, Image, ExifTags
-import re
-import dateutil.parser as dparser
-from PIL import Image
-import os
-import unicodedata
-import urllib
-import base64
+import collections
+import asyncio
+import sqlite3
 import logging
 import logging.handlers as handlers
 from logging.handlers import RotatingFileHandler
-import config
-import sql
+import uuid
 import threading
 import datetime
-import uuid
-import tensorflow.keras
-import dlib
-import cv2
-import numpy as np
-from skimage import io as iosk
-import sqlite3
 from collections import defaultdict
+import face_recognition
+from PIL import ImageOps, Image
+import tensorflow.keras
+from aiohttp import web
 import aiohttp_cors
 from aiohttp_cors import setup as cors_setup, ResourceOptions
-import asyncio
-import collections
+from skimage import io as iosk
+import cv2
+import numpy as np
+import dlib
+import config
+import sql
+import urllib.request
 
 model = tensorflow.keras.models.load_model("keras_model.h5")
 logging.basicConfig(
-    handlers=[RotatingFileHandler(
-        "faceauth.log", maxBytes=10485760, backupCount=10)],
+    handlers=[RotatingFileHandler("faceauth.log", maxBytes=10485760, backupCount=10)],
     level=logging.DEBUG,
     format='"%(asctime)s -[Face Recogntion] - %(levelname)-7.7s %(message)s',
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -74,12 +66,10 @@ async def decodeImage(msg):
 
 
 async def get_face_encoding_from_base64(base64String):
-    nparr = np.frombuffer(base64.b64decode(
-        base64String.encode("utf-8")), np.uint8)
+    nparr = np.frombuffer(base64.b64decode(base64String.encode("utf-8")), np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    image_encodeing = face_recognition.face_encodings(
-        rgb_img, None, 1, "large")
+    image_encodeing = face_recognition.face_encodings(rgb_img)
     # print(image_encodeing)
     return image_encodeing
 
@@ -95,8 +85,6 @@ def upload_image():
     """
     This is the test method which accepts any 2 images and gives out the comparision result
     """
-    default_UploadPath = sourceFaceImage
-    default_AadharPath = destFaceImage
     logging.info("Upload_Image")
     # Check if a valid image file was uploaded
     if request.method == "POST":
@@ -248,8 +236,7 @@ async def DetectAndCompareFacesInImages(
         return comparisionResult
     except Exception as ex:
         logging.info(
-            agentId + ":Exception in DetectAndCompareFacesInImages : " +
-            str(ex)
+            agentId + ":Exception in DetectAndCompareFacesInImages : " + str(ex)
         )
 
         return await ProcessExceptionData(
@@ -267,7 +254,8 @@ async def GetFaceComparisionPercentage(
     face_distance, agentId, face_match_threshold=0.6
 ):
     """
-    This method will give the percentage of match between the 2 image encodings with respect to the threshold
+    This method will give the percentage of match between the 2 image encodings
+    with respect to the threshold
     """
     logging.info(
         agentId
@@ -331,7 +319,8 @@ async def VerifyFaceImages(self, *, loads=json.loads):
             + isrealface
         )
 
-        # Check if snapdata or ppdata or agentId is empty. If empty return back with exception to the client
+        # Check if snapdata or ppdata or agentId is empty.
+        # If empty return back with exception to the client
         if snap_data == "" or pp_data == "" or agent_id == "":
             logging.info(
                 agent_id
@@ -395,6 +384,10 @@ async def VerifyFaceImages(self, *, loads=json.loads):
         if pp_type == "url":
             destination_filename = pp_data
             defaultDestFilePath = defaultDestFilePath + destination_filename
+            source_image_url_path = config.sourceFaceImageURL + source_filename
+            if config.is_profilepic_url:
+                urllib.request.urlretrieve(config.destFaceImageURL + pp_data, defaultDestFilePath)
+                source_image_url_path = snap_data
         else:
             # base64
             uuid_datetime = (
@@ -407,8 +400,7 @@ async def VerifyFaceImages(self, *, loads=json.loads):
             with open(defaultDestFilePath, "wb") as fh:
                 fh.write(base64.b64decode(pp_data))
 
-        dest_image_url_path = config.destFaceImageURL
-        source_image_url_path = config.sourceFaceImageURL
+        dest_image_url_path = config.destFaceImageURL + pp_data
 
         return_data = await DetectAndCompareFacesInImages(
             defaultDestFilePath,
@@ -419,8 +411,7 @@ async def VerifyFaceImages(self, *, loads=json.loads):
             dest_image_url_path,
             source_image_url_path,
         )
-        logging.info(agent_id + ":VerifyFaceImages Response: " +
-                     str(return_data))
+        logging.info(agent_id + ":VerifyFaceImages Response: " + str(return_data))
 
         return web.json_response(return_data)
 
@@ -448,7 +439,10 @@ async def ProcessExceptionData(
     response_datetime,
 ):
     """
-    This method is a generic method whenever there is an exception raised. Accepts the message and other parameters and returns back the client
+    This method is a generic method whenever
+    there is an exception raised. 
+    Accepts the message and other parameters and 
+    returns back the client
     """
     try:
         logging.info(agentId + ":ProcessExceptionData")
@@ -474,13 +468,11 @@ async def ProcessExceptionData(
             ),
         ).start()
         logging.info(
-            agentId + ":ProcessExceptionData Response: " +
-            str(comparisionResult)
+            agentId + ":ProcessExceptionData Response: " + str(comparisionResult)
         )
         return web.json_response(comparisionResult, status=500)
     except Exception as identifier:
-        logging.info(
-            agentId + ":Exception in ProcessExceptionData" + str(identifier))
+        logging.info(agentId + ":Exception in ProcessExceptionData" + str(identifier))
         comparisionResult = {
             "face_found_in_image": 0,
             "face_authenticated_percentage": 0,
@@ -496,15 +488,14 @@ async def detect_faces(image, name):
 
         # Run detector and get bounding boxes of the faces on image.
         detected_faces = face_detector(image, 1)
-        logging.info("Number of faces detected: {}".format(
-            len(detected_faces)))
+        logging.info("Number of faces detected: {}".format(len(detected_faces)))
         for i, d in enumerate(detected_faces):
             logging.info(
                 "Detection {}: Left: {} Top: {} Right: {} Bottom: {}".format(
                     i, d.left(), d.top(), d.right(), d.bottom()
                 )
             )
-            crop = image[d.top(): d.bottom(), d.left(): d.right()]
+            crop = image[d.top() : d.bottom(), d.left() : d.right()]
             resize = cv2.resize(crop, (200, 200))
             return resize
     except Exception as identifier:
@@ -584,7 +575,7 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
         defaultSourceFilePath = sourceFaceImage
         defaultDestFilePath = destFaceImage
 
-        agent_id = json_req["agentId"]
+        agent_id = json_req["lanId"]
         originator_name = json_req["originator"]
         snap_encoded_data = json_req["snapEncodedData"]
         isrealface = json_req["isRealFace"]
@@ -593,7 +584,7 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
         logging.info(
             agent_id
             + ":VerifyFaceAuthWithEncoding Request: "
-            + "agentId: "
+            + "lanId: "
             + agent_id
             + ", originator: "
             + originator_name
@@ -609,7 +600,7 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
                 agent_id
                 + ":VerifyFaceAuthWithEncoding snapdata: "
                 + snap_encoded_data
-                + " agentId: "
+                + " lanId: "
                 + agent_id
             )
             return ProcessExceptionData(
@@ -681,8 +672,7 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
             return web.json_response(comparisionResult)
         dest_image_url_path = profilePic_encodingData[agent_id]["url"]
         source_image_url_path = snap_data_url
-        logging.info(
-            agent_id + ":Destination and source Image URL path assigned")
+        logging.info(agent_id + ":Destination and source Image URL path assigned")
 
         destFaceEncodingValue = profilePic_encodingData[agent_id]["encoding"]
         logging.info(
@@ -737,15 +727,13 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
         ).start()
 
         logging.info(
-            agent_id + ":VerifyFaceAuthWithEncoding Response: " +
-            str(comparisionResult)
+            agent_id + ":VerifyFaceAuthWithEncoding Response: " + str(comparisionResult)
         )
 
         return web.json_response(comparisionResult)
 
     except Exception as ex:
-        logging.info(
-            agent_id + ":Exception in VerifyFaceAuthWithEncoding : " + str(ex))
+        logging.info(agent_id + ":Exception in VerifyFaceAuthWithEncoding : " + str(ex))
 
         return await ProcessExceptionData(
             agent_id,
@@ -760,7 +748,8 @@ async def VerifyFaceAuthWithEncoding(self, *, loads=json.loads):
 
 async def AddOrUpdateProfilePic(self, *, loads=json.loads):
     """
-    Method to update the encoding of profile pic of user into a pickle dict. 
+    Method to update the encoding of profile pic of
+    user into a pickle dict. 
     INPUT: agentId, Image URL
     OUTPUT: True/False
     """
@@ -772,28 +761,22 @@ async def AddOrUpdateProfilePic(self, *, loads=json.loads):
 
         json_req = await self.text()
         json_req = json.loads(json_req)
-        agent_id = json_req["agentId"]
-        profilepic_url = json_req["profilepicurl"]
-        logging.info(
-            agent_id + ": AddOrUpdateProfilePic: Profile Pic URL: " + profilepic_url
-        )
-        # # # if os.path.exists(pickle_filename):
-        # # #     with open(pickle_filename, 'rb') as handle:
-        # # #         profilePic_encodingData = pickle.load(handle)
-        # # # else:
-        # # #     # make a new one
-        # # #     # we use a dict for keeping track of mapping of each person with his/her face encoding
-        # # #     profilePic_encodingData = defaultdict(dict)
-        profilePic = iosk.imread(profilepic_url)
-        profilePicEncoding = face_recognition.face_encodings(profilePic)
+        agent_id = json_req["lanId"]
+        profilepic = json_req["profilePic"]
+        request_type = json_req["requestType"]
+
+        if request_type == "url":
+            profilePicture = iosk.imread(profilepic)
+            profilePicEncoding = face_recognition.face_encodings(profilePicture)
+        else:
+            profilePicEncoding = await get_face_encoding_from_base64(profilepic)
         # enco = json.dumps(profilePicEncoding)
         string = json.dumps(profilePicEncoding[0].tolist())
 
-        data_to_be_inserted = (agent_id, profilepic_url, string)
+        data_to_be_inserted = (agent_id, profilepic, string)
 
         cursor.execute(
-            "SELECT AGENTID FROM AGENTPROFILEPICDETAILS WHERE AGENTID = ?", (
-                agent_id,)
+            "SELECT AGENTID FROM AGENTPROFILEPICDETAILS WHERE AGENTID = ?", (agent_id,)
         )
         ROW = cursor.fetchone()
 
@@ -805,31 +788,18 @@ async def AddOrUpdateProfilePic(self, *, loads=json.loads):
             count = cursor.execute(sqlite_insert_query, data_to_be_inserted)
             conn.commit()
         else:
-            data_to_be_inserted = (profilepic_url, string, agent_id)
+            data_to_be_inserted = (profilepic, string, agent_id)
             sqlite_insert_query = """UPDATE AGENTPROFILEPICDETAILS SET PROFILEPICURL=?, ENCODINGDATA=? WHERE AGENTID=?"""
             cursor.execute(sqlite_insert_query, data_to_be_inserted)
             conn.commit()
         conn.close()
         profilePic_encodingData[agent_id]["encoding"] = profilePicEncoding
-        profilePic_encodingData[agent_id]["url"] = profilepic_url
+        profilePic_encodingData[agent_id]["url"] = profilepic
 
-        # # # profilePic_encodingData[agent_id]['url'] = profilepic_url
-        # # # profilePic_encodingData[agent_id]['face_encoding'] = profilePicEncoding
-
-        # # # Updating the agent ID and encoding to the pickle
-        # # # outfile = open(pickle_filename, 'wb')
-        # # # pickle.dump(profilePic_encodingData, outfile,
-        # # #             protocol=pickle.HIGHEST_PROTOCOL)
-        # # # outfile.close()
-
-        # # # infile = open(pickle_filename, 'rb')
-        # # # profilePic_encodingData = pickle.load(infile)
-        # # # infile.close()
         return web.json_response(True)
 
     except Exception as ex:
-        logging.info(
-            agent_id + ": Exception in AddOrUpdateProfilePic: " + str(ex))
+        logging.info(agent_id + ": Exception in AddOrUpdateProfilePic: " + str(ex))
         return web.json_response(False)
 
 
@@ -852,41 +822,27 @@ def initialize_db():
 @asyncio.coroutine
 def handler(request):
     return web.Response(
-        text="Hello!", headers={"X-Custom-Server-Header": "Custom data", }
+        text="Hello!", headers={"X-Custom-Server-Header": "Custom data",}
     )
+
+
+def load_profilepic_to_sqlite():
+    return_data = sql.load_profilepic()
+    # conn = sqlite3.connect("profilePicEncoding.db")
+    # lite_cursor = conn.cursor()
+    # lite_cursor.execute(
+    #         "SELECT AGENTID,PROFILEPICURL,ENCODINGDATA FROM AGENTPROFILEPICDETAILS")
+    # rows = lite_cursor.fetchall()
+
+    # for row in rows:
+    #     print(row)
 
 
 app = web.Application()
 cors = aiohttp_cors.setup(app)
+if config.is_load_profilepic_onstartup:
+    load_profilepic_to_sqlite()
 initialize_db()  # initialize sqlite db
-# add the below 2 methods for allowing cors
-# resource = cors.add(app.router.add_resource("/VerifyFaceAuthWithEncoding"))
-# profile_resource = cors.add(app.router.add_resource("/AddOrUpdateProfilePic"))
-# verifyImages_resource = cors.add(app.router.add_resource("/VerifyFaceImages"))
-# route = cors.add(
-#     verifyImages_resource.add_route("POST", VerifyFaceImages),
-#     {
-#         "*": aiohttp_cors.ResourceOptions(
-#             allow_credentials=True, expose_headers="*", allow_headers="*"
-#         )
-#     },
-# )
-# route = cors.add(
-#     resource.add_route("POST", VerifyFaceAuthWithEncoding),
-#     {
-#         "*": aiohttp_cors.ResourceOptions(
-#             allow_credentials=True, expose_headers="*", allow_headers="*"
-#         )
-#     },
-# )
-# route = cors.add(
-#     profile_resource.add_route("POST", AddOrUpdateProfilePic),
-#     {
-#         "*": aiohttp_cors.ResourceOptions(
-#             allow_credentials=True, expose_headers="*", allow_headers="*"
-#         )
-#     },
-# )
 
 routes = [
     web.post("/VerifyFaceImages", VerifyFaceImages),
@@ -896,7 +852,7 @@ routes = [
     # web.static('/sourcepic', config.directory_browsing_destImage,
     #            show_index=True),
     web.post("/AddOrUpdateProfilePic", AddOrUpdateProfilePic),
-    web.post("/VerifyFaceAuthWithEncoding", VerifyFaceAuthWithEncoding)
+    web.post("/VerifyFaceAuthWithEncoding", VerifyFaceAuthWithEncoding),
 ]
 
 app.router.add_routes(routes)
